@@ -1,3 +1,20 @@
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyCBi6GCigBZx5yRTTTW8SXHzSkA1uTAvpM",
+    authDomain: "billingsol-e9a83.firebaseapp.com",
+    databaseURL: "https://billingsol-e9a83-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "billingsol-e9a83",
+    storageBucket: "billingsol-e9a83.firebasestorage.app",
+    messagingSenderId: "436716611232",
+    appId: "1:436716611232:web:e185ad817d4a67d0f94bc5",
+    measurementId: "G-7RG9H1C0BM"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const database = firebase.database();
+
 // Application State
 let products = [];
 let billItems = [];
@@ -205,19 +222,24 @@ async function handleRegister(event) {
             return;
         }
         
-        // Create new user
+        // Create user with Firebase Authentication
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const firebaseUser = userCredential.user;
+        
+        // Create new user object (without password - Firebase Auth handles that)
         const newUser = {
-            id: Date.now(),
             username: username,
             fullName: fullName,
             email: email,
-            password: hashPassword(password),
             role: users.length === 0 ? 'admin' : 'user', // First user is admin
             createdAt: new Date().toLocaleString('en-IN'),
-            isActive: true
+            isActive: true,
+            firebaseUid: firebaseUser.uid
         };
         
-        await saveUser(newUser);
+        // Save user data to Firebase Realtime Database
+        const userId = await saveUser(newUser);
+        newUser.id = userId;
         users.push(newUser);
         
         // Auto-login after registration
@@ -227,7 +249,15 @@ async function handleRegister(event) {
         showAlert(`Registration successful! Welcome, ${newUser.fullName}!`, 'success');
     } catch (error) {
         console.error('Registration error:', error);
-        showAlert('Registration failed. Please try again.', 'error');
+        let errorMessage = 'Registration failed. Please try again.';
+        if (error.code === 'auth/email-already-in-use') {
+            errorMessage = 'Email already in use';
+        } else if (error.code === 'auth/weak-password') {
+            errorMessage = 'Password is too weak';
+        } else if (error.code === 'auth/invalid-email') {
+            errorMessage = 'Invalid email address';
+        }
+        showAlert(errorMessage, 'error');
     }
 }
 
@@ -277,130 +307,108 @@ async function loadUserData() {
 // ============== USER DATABASE OPERATIONS ==============
 
 async function authenticateUser(username, password) {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readonly');
-            const userStore = tx.objectStore('users');
-            const index = userStore.index('username');
-            const request = index.get(username);
-            
-            request.onsuccess = () => {
-                const user = request.result;
-                if (user && user.password === hashPassword(password) && user.isActive) {
-                    resolve(user);
-                } else {
-                    resolve(null);
-                }
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
+    try {
+        // First, get user data from Firebase Realtime Database
+        const userRef = database.ref('users');
+        const snapshot = await userRef.orderByChild('username').equalTo(username).once('value');
+        const userData = snapshot.val();
+        
+        if (!userData) {
+            return null;
         }
-    });
+        
+        // Get the first (and should be only) user with this username
+        const userId = Object.keys(userData)[0];
+        const user = userData[userId];
+        
+        if (!user.isActive) {
+            return null;
+        }
+        
+        // Authenticate with Firebase Auth using email
+        const userCredential = await auth.signInWithEmailAndPassword(user.email, password);
+        
+        if (userCredential.user) {
+            return { ...user, id: userId };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Authentication error:', error);
+        return null;
+    }
 }
 
 async function getUserByUsername(username) {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readonly');
-            const userStore = tx.objectStore('users');
-            const index = userStore.index('username');
-            const request = index.get(username);
-            
-            request.onsuccess = () => {
-                resolve(request.result);
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
+    try {
+        const userRef = database.ref('users');
+        const snapshot = await userRef.orderByChild('username').equalTo(username).once('value');
+        const userData = snapshot.val();
+        
+        if (!userData) {
+            return null;
         }
-    });
+        
+        // Get the first (and should be only) user with this username
+        const userId = Object.keys(userData)[0];
+        return { ...userData[userId], id: userId };
+    } catch (error) {
+        console.error('Error getting user by username:', error);
+        throw error;
+    }
 }
 
 async function saveUser(user) {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readwrite');
-            const userStore = tx.objectStore('users');
-            const request = userStore.add(user);
-            
-            request.onsuccess = () => {
-                resolve();
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
-        }
-    });
+    try {
+        const userRef = database.ref('users');
+        const newUserRef = userRef.push();
+        await newUserRef.set(user);
+        return newUserRef.key;
+    } catch (error) {
+        console.error('Error saving user:', error);
+        throw error;
+    }
 }
 
 async function getAllUsers() {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readonly');
-            const userStore = tx.objectStore('users');
-            const request = userStore.getAll();
-            
-            request.onsuccess = () => {
-                resolve(request.result);
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
+    try {
+        const userRef = database.ref('users');
+        const snapshot = await userRef.once('value');
+        const usersData = snapshot.val();
+        
+        if (!usersData) {
+            return [];
         }
-    });
+        
+        // Convert object to array with IDs
+        return Object.keys(usersData).map(key => ({
+            ...usersData[key],
+            id: key
+        }));
+    } catch (error) {
+        console.error('Error getting all users:', error);
+        throw error;
+    }
 }
 
 async function updateUser(user) {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readwrite');
-            const userStore = tx.objectStore('users');
-            const request = userStore.put(user);
-            
-            request.onsuccess = () => {
-                resolve();
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
-        }
-    });
+    try {
+        const userRef = database.ref('users/' + user.id);
+        await userRef.update(user);
+    } catch (error) {
+        console.error('Error updating user:', error);
+        throw error;
+    }
 }
 
 async function deleteUser(userId) {
-    return new Promise((resolve, reject) => {
-        try {
-            const tx = db.transaction(['users'], 'readwrite');
-            const userStore = tx.objectStore('users');
-            const request = userStore.delete(userId);
-            
-            request.onsuccess = () => {
-                resolve();
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            reject(error);
-        }
-    });
+    try {
+        const userRef = database.ref('users/' + userId);
+        await userRef.remove();
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        throw error;
+    }
 }
 
 function hashPassword(password) {
@@ -1425,7 +1433,7 @@ function numberToWords(num) {
     return convert(num);
 }
 
-function saveBill() {
+async function saveBill() {
     if (billItems.length === 0) {
         showAlert('Please add items to the bill before saving', 'error');
         return;
@@ -1447,9 +1455,8 @@ function saveBill() {
             }
         });
         
-        // Save bill to IndexedDB
-        const billTx = db.transaction(['bills'], 'readwrite');
-        const billStore = billTx.objectStore('bills');
+        // Save bill to Firebase Realtime Database
+        const billsRef = database.ref('bills');
         
         const billData = {
             userId: currentUser ? currentUser.id : null,
@@ -1469,7 +1476,7 @@ function saveBill() {
             savedAt: new Date().toLocaleString('en-IN')
         };
         
-        billStore.add(billData);
+        await billsRef.push(billData);
         
         // Save updated products
         saveData();
@@ -1485,120 +1492,56 @@ function saveBill() {
 
 // ============== INDEXEDDB OPERATIONS ==============
 
-function saveData() {
-    return new Promise((resolve, reject) => {
-        try {
-            // Save products
-            const tx = db.transaction(['products'], 'readwrite');
-            const productStore = tx.objectStore('products');
-            
-            // Clear existing products
-            const clearRequest = productStore.clear();
-            
-            clearRequest.onsuccess = () => {
-                // Add all products
-                products.forEach(product => {
-                    productStore.add(product);
-                });
-            };
-            
-            tx.oncomplete = () => {
-                console.log('Products saved to IndexedDB');
-                
-                // Save invoice counter
-                const metaTx = db.transaction(['metadata'], 'readwrite');
-                const metaStore = metaTx.objectStore('metadata');
-                metaStore.put({ key: 'invoiceCounter', value: invoiceCounter });
-                
-                metaTx.oncomplete = () => {
-                    console.log('Invoice counter saved to IndexedDB');
-                    resolve();
-                };
-                
-                metaTx.onerror = () => {
-                    console.error('Error during metadata transaction:', metaTx.error);
-                    resolve();
-                };
-            };
-            
-            tx.onerror = () => {
-                console.error('Error during product transaction:', tx.error);
-                reject(tx.error);
-            };
-        } catch (error) {
-            console.error('Error saving data:', error);
-            reject(error);
-        }
-    });
+async function saveData() {
+    try {
+        // Save products to Firebase Realtime Database
+        const productsRef = database.ref('products');
+        await productsRef.set(products);
+        console.log('Products saved to Firebase');
+        
+        // Save invoice counter to Firebase Realtime Database
+        const metadataRef = database.ref('metadata');
+        await metadataRef.set({ invoiceCounter: invoiceCounter });
+        console.log('Invoice counter saved to Firebase');
+    } catch (error) {
+        console.error('Error saving data:', error);
+        throw error;
+    }
 }
 
-function loadData() {
-    return new Promise((resolve, reject) => {
-        try {
-            let loadCount = 0;
-            const expectedLoads = 2;
-            
-            // Load products
-            const productTx = db.transaction(['products'], 'readonly');
-            const productStore = productTx.objectStore('products');
-            const productRequest = productStore.getAll();
-            
-            productRequest.onsuccess = () => {
-                const allProducts = productRequest.result;
-                // Filter products by current user (admin sees all, user sees only their own)
-                if (currentUser && currentUser.role === 'admin') {
-                    products = allProducts;
-                } else if (currentUser) {
-                    products = allProducts.filter(p => p.userId === currentUser.id);
-                } else {
-                    products = [];
-                }
-                console.log(`Loaded ${products.length} products from IndexedDB`);
-                loadCount++;
-                if (loadCount === expectedLoads) {
-                    resolve();
-                }
-            };
-            
-            productRequest.onerror = () => {
-                console.error('Error loading products:', productRequest.error);
-                loadCount++;
-                if (loadCount === expectedLoads) {
-                    resolve();
-                }
-            };
-            
-            // Load invoice counter
-            const metaTx = db.transaction(['metadata'], 'readonly');
-            const metaStore = metaTx.objectStore('metadata');
-            const metaRequest = metaStore.get('invoiceCounter');
-            
-            metaRequest.onsuccess = () => {
-                if (metaRequest.result) {
-                    invoiceCounter = metaRequest.result.value;
-                    console.log('Loaded invoice counter:', invoiceCounter);
-                }
-                loadCount++;
-                if (loadCount === expectedLoads) {
-                    updateBillProductSelect();
-                    resolve();
-                }
-            };
-            
-            metaRequest.onerror = () => {
-                console.error('Error loading metadata:', metaRequest.error);
-                loadCount++;
-                if (loadCount === expectedLoads) {
-                    resolve();
-                }
-            };
-            
-            console.log('Starting data load from IndexedDB');
-        } catch (error) {
-            console.error('Error loading data:', error);
-            reject(error);
+async function loadData() {
+    try {
+        // Load products from Firebase Realtime Database
+        const productsRef = database.ref('products');
+        const productsSnapshot = await productsRef.once('value');
+        const allProducts = productsSnapshot.val() || [];
+        
+        // Filter products by current user (admin sees all, user sees only their own)
+        if (currentUser && currentUser.role === 'admin') {
+            products = Array.isArray(allProducts) ? allProducts : Object.values(allProducts);
+        } else if (currentUser) {
+            const productsArray = Array.isArray(allProducts) ? allProducts : Object.values(allProducts);
+            products = productsArray.filter(p => p.userId === currentUser.id);
+        } else {
+            products = [];
         }
-    });
+        console.log(`Loaded ${products.length} products from Firebase`);
+        
+        // Load invoice counter from Firebase Realtime Database
+        const metadataRef = database.ref('metadata');
+        const metadataSnapshot = await metadataRef.once('value');
+        const metadata = metadataSnapshot.val();
+        
+        if (metadata && metadata.invoiceCounter) {
+            invoiceCounter = metadata.invoiceCounter;
+            console.log('Loaded invoice counter:', invoiceCounter);
+        }
+        
+        updateBillProductSelect();
+    } catch (error) {
+        console.error('Error loading data:', error);
+        throw error;
+    }
 }
 
 // ============== UTILITY FUNCTIONS ==============
@@ -1621,76 +1564,63 @@ function showAlert(message, type) {
 // ============== SAVED BILLS MANAGEMENT ==============
 
 async function getAllSavedBills() {
-    return new Promise((resolve, reject) => {
-        try {
-            const billTx = db.transaction(['bills'], 'readonly');
-            const billStore = billTx.objectStore('bills');
-            const request = billStore.getAll();
-            
-            request.onsuccess = () => {
-                const allBills = request.result;
-                // Filter bills by current user (admin sees all, user sees only their own)
-                if (currentUser && currentUser.role === 'admin') {
-                    resolve(allBills);
-                } else if (currentUser) {
-                    resolve(allBills.filter(b => b.userId === currentUser.id));
-                } else {
-                    resolve([]);
-                }
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            console.error('Error retrieving bills:', error);
-            reject(error);
+    try {
+        const billsRef = database.ref('bills');
+        const snapshot = await billsRef.once('value');
+        const allBillsData = snapshot.val();
+        
+        if (!allBillsData) {
+            return [];
         }
-    });
+        
+        // Convert object to array with IDs
+        const allBills = Object.keys(allBillsData).map(key => ({
+            ...allBillsData[key],
+            id: key
+        }));
+        
+        // Filter bills by current user (admin sees all, user sees only their own)
+        if (currentUser && currentUser.role === 'admin') {
+            return allBills;
+        } else if (currentUser) {
+            return allBills.filter(b => b.userId === currentUser.id);
+        } else {
+            return [];
+        }
+    } catch (error) {
+        console.error('Error retrieving bills:', error);
+        throw error;
+    }
 }
 
 async function getBillByInvoiceNumber(invoiceNumber) {
-    return new Promise((resolve, reject) => {
-        try {
-            const billTx = db.transaction(['bills'], 'readonly');
-            const billStore = billTx.objectStore('bills');
-            const index = billStore.index('invoiceNumber');
-            const request = index.get(invoiceNumber);
-            
-            request.onsuccess = () => {
-                resolve(request.result);
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            console.error('Error retrieving bill:', error);
-            reject(error);
+    try {
+        const billsRef = database.ref('bills');
+        const snapshot = await billsRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).once('value');
+        const billsData = snapshot.val();
+        
+        if (!billsData) {
+            return null;
         }
-    });
+        
+        // Get the first (and should be only) bill with this invoice number
+        const billId = Object.keys(billsData)[0];
+        return { ...billsData[billId], id: billId };
+    } catch (error) {
+        console.error('Error retrieving bill:', error);
+        throw error;
+    }
 }
 
 async function deleteSavedBill(billId) {
-    return new Promise((resolve, reject) => {
-        try {
-            const billTx = db.transaction(['bills'], 'readwrite');
-            const billStore = billTx.objectStore('bills');
-            const request = billStore.delete(billId);
-            
-            request.onsuccess = () => {
-                console.log('Bill deleted successfully');
-                resolve();
-            };
-            
-            request.onerror = () => {
-                reject(request.error);
-            };
-        } catch (error) {
-            console.error('Error deleting bill:', error);
-            reject(error);
-        }
-    });
+    try {
+        const billRef = database.ref('bills/' + billId);
+        await billRef.remove();
+        console.log('Bill deleted successfully');
+    } catch (error) {
+        console.error('Error deleting bill:', error);
+        throw error;
+    }
 }
 
 async function printLastSavedBill() {
@@ -1771,13 +1701,11 @@ function closeSavedBillsModal() {
 
 async function printSavedBill(billId) {
     try {
-        const billTx = db.transaction(['bills'], 'readonly');
-        const billStore = billTx.objectStore('bills');
-        const request = billStore.get(billId);
+        const billRef = database.ref('bills/' + billId);
+        const snapshot = await billRef.once('value');
+        const bill = snapshot.val();
         
-        request.onsuccess = () => {
-            const bill = request.result;
-            if (bill) {
+        if (bill) {
                 const printContainer = document.getElementById('printContainer');
                 
                 // Calculate total items and quantity
@@ -1954,8 +1882,8 @@ async function printSavedBill(billId) {
                 printContainer.innerHTML = invoiceHTML;
                 window.print();
             }
-        };
-    } catch (error) {
+        }
+    catch (error) {
         console.error('Error printing bill:', error);
         showAlert('Error printing bill', 'error');
     }
@@ -1999,25 +1927,25 @@ function exportData() {
     });
 }
 
-function clearDatabase() {
+async function clearDatabase() {
     if (confirm('⚠️ WARNING: This will delete all data! Are you sure?') &&
         confirm('This action cannot be undone. Type "DELETE ALL" to confirm: ')) {
-        
+
         const userInput = prompt('Type "DELETE ALL" to confirm deletion of all data:');
         if (userInput === 'DELETE ALL') {
             try {
-                // Clear products
-                const productTx = db.transaction(['products'], 'readwrite');
-                productTx.objectStore('products').clear();
-                
-                // Clear bills
-                const billTx = db.transaction(['bills'], 'readwrite');
-                billTx.objectStore('bills').clear();
-                
-                // Clear metadata
-                const metaTx = db.transaction(['metadata'], 'readwrite');
-                metaTx.objectStore('metadata').clear();
-                
+                // Clear products from Firebase
+                const productsRef = database.ref('products');
+                await productsRef.remove();
+
+                // Clear bills from Firebase
+                const billsRef = database.ref('bills');
+                await billsRef.remove();
+
+                // Clear metadata from Firebase
+                const metadataRef = database.ref('metadata');
+                await metadataRef.remove();
+
                 // Reset app state
                 products = [];
                 billItems = [];
@@ -2034,13 +1962,13 @@ function clearDatabase() {
                     total: 0,
                     notes: ''
                 };
-                
+
                 renderProducts();
                 renderBillItems();
                 updateInvoiceNumber();
                 updateBillProductSelect();
                 closeSavedBillsModal();
-                
+
                 showAlert('All data has been cleared!', 'success');
             } catch (error) {
                 console.error('Error clearing database:', error);
