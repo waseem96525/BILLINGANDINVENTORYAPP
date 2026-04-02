@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing & Inventory Management System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login/Register Screen -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h1>📦 Billing & Inventory</h1>
+                <p>Multi-User Management System</p>
+            </div>
+            
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form">
+                <h2>Login</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginUsername">Username:</label>
+                        <input type="text" id="loginUsername" placeholder="Enter username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" id="loginPassword" placeholder="Enter password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                </form>
+                <p class="auth-switch">
+                    Don't have an account? <a href="#" onclick="showRegisterForm()">Register</a>
+                </p>
+            </div>
+            
+            <!-- Register Form -->
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2>Register</h2>
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="registerUsername">Username:</label>
+                        <input type="text" id="registerUsername" placeholder="Choose a username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerFullName">Full Name:</label>
+                        <input type="text" id="registerFullName" placeholder="Enter your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email:</label>
+                        <input type="email" id="registerEmail" placeholder="Enter email address">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Password:</label>
+                        <input type="password" id="registerPassword" placeholder="Choose a password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerConfirmPassword">Confirm Password:</label>
+                        <input type="password" id="registerConfirmPassword" placeholder="Confirm password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Register</button>
+                </form>
+                <p class="auth-switch">
+                    Already have an account? <a href="#" onclick="showLoginForm()">Login</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Application (Hidden until authenticated) -->
+    <div id="mainApp" class="container" style="display: none;">
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>📦 Billing & Inventory Management System</h1>
+                    <p>Manage products and create professional invoices</p>
+                </div>
+                <div class="header-actions">
+                    <div class="user-info">
+                        <span class="user-icon">👤</span>
+                        <span id="currentUserName">User</span>
+                        <span id="currentUserRole" class="user-role">User</span>
+                    </div>
+                    <button class="settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
+                    <button class="settings-btn" onclick="openUserManagementModal()" id="userMgmtBtn" style="display: none;">👥 Users</button>
+                    <button class="settings-btn logout-btn" onclick="handleLogout()">🚪 Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Panel: Inventory Management -->
+            <section class="panel inventory-panel">
+                <div class="panel-header">
+                    <h2>Inventory Management</h2>
+                </div>
+
+                <!-- Inventory Dashboard -->
+                <div class="inventory-dashboard">
+                    <div class="dashboard-card">
+                        <div class="dashboard-label">Total Products</div>
+                        <div class="dashboard-value" id="totalProducts">0</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="dashboard-label">Total Stock Value</div>
+                        <div class="dashboard-value" id="totalStockValue">₹0</div>
+                    </div>
+                    <div class="dashboard-card alert-card">
+                        <div class="dashboard-label">⚠️ Low Stock Items</div>
+                        <div class="dashboard-value" id="lowStockCount">0</div>
+                    </div>
+                </div>
+
+                <!-- Add Product Form (Collapsible) -->
+                <div class="form-section">
+                    <button class="form-toggle" onclick="toggleFormSection()">⊕ Add New Product</button>
+                    <form id="productForm" class="form-content" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="productName">Product Name:</label>
+                                <input type="text" id="productName" placeholder="Enter product name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="productSKU">SKU:</label>
+                                <input type="text" id="productSKU" placeholder="e.g., SKU-001">
+                            </div>
+                            <div class="form-group">
+                                <label for="productBarcode">Barcode:</label>
+                                <input type="text" id="productBarcode" placeholder="e.g., 123456789">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="productCategory">Category:</label>
+                                <select id="productCategory">
+                                    <option value="Electronics">Electronics</option>
+                                    <option value="Clothing">Clothing</option>
+                                    <option value="Food">Food & Beverage</option>
+                                    <option value="Books">Books</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="productCostPrice">Cost Price:</label>
+                                <input type="number" id="productCostPrice" placeholder="0.00" step="0.01" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="productPrice">Selling Price:</label>
+                                <input type="number" id="productPrice" placeholder="0.00" step="0.01" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="productMRP">MRP:</label>
+                                <input type="number" id="productMRP" placeholder="0.00" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="productQuantity">Quantity:</label>
+                                <input type="number" id="productQuantity" placeholder="0" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="productReorderPoint">Reorder Point:</label>
+                                <input type="number" id="productReorderPoint" placeholder="Stock level to reorder" min="0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="productDescription">Description:</label>
+                            <textarea id="productDescription" placeholder="Add product description" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Product</button>
+                    </form>
+                </div>
+
+                <!-- Search & Filter -->
+                <div class="inventory-controls">
+                    <div class="search-box">
+                        <input type="text" id="productSearch" placeholder="🔍 Search by name or SKU..." class="search-input">
+                    </div>
+                    <div class="filter-controls">
+                        <select id="categoryFilter" class="filter-select">
+                            <option value="">All Categories</option>
+                            <option value="Electronics">Electronics</option>
+                            <option value="Clothing">Clothing</option>
+                            <option value="Food">Food & Beverage</option>
+                            <option value="Books">Books</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <select id="stockFilter" class="filter-select">
+                            <option value="">All Items</option>
+                            <option value="in-stock">In Stock</option>
+                            <option value="low-stock">Low Stock</option>
+                            <option value="out-of-stock">Out of Stock</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="exportProducts()" style="width: auto; padding: 8px 15px;">⬇️ Export</button>
+                    </div>
+                </div>
+
+                <!-- Products List -->
+                <div class="products-section">
+                    <h3>Product Inventory (<span id="productCount">0</span>)</h3>
+                    <div id="productsList" class="products-list">
+                        <p class="empty-state">No products added yet</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Billing -->
+            <section class="panel billing-panel">
+                <div class="panel-header">
+                    <h2>Billing Invoice</h2>
+                </div>
+
+                <!-- Bill Details -->
+                <div class="bill-details">
+                    <div class="detail-row">
+                        <label>Invoice #:</label>
+                        <span id="invoiceNumber">INV-001</span>
+                    </div>
+                    <div class="detail-row">
+                        <label>Date:</label>
+                        <span id="invoiceDate">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <label>Customer Name:</label>
+                        <input type="text" id="customerName" placeholder="Enter customer name">
+                    </div>
+                    <div class="detail-row">
+                        <label>Customer Phone:</label>
+                        <input type="tel" id="customerPhone" placeholder="Enter phone number">
+                    </div>
+                    <div class="detail-row">
+                        <label>Customer Email:</label>
+                        <input type="email" id="customerEmail" placeholder="Enter email address">
+                    </div>
+                    <div class="detail-row">
+                        <label>Mode of Payment:</label>
+                        <select id="paymentMode" class="payment-mode-select">
+                            <option value="Cash">Cash</option>
+                            <option value="Card">Card</option>
+                            <option value="UPI">UPI</option>
+                            <option value="Check">Check</option>
+                            <option value="Online Transfer">Online Transfer</option>
+                            <option value="Wallet">Wallet</option>
+                            <option value="Credit">Credit</option>
+                        </select>
+                    </div>
+                    <div class="quick-payment-buttons">
+                        <button class="quick-pay-btn" onclick="setPaymentMode('Cash')">💵 Cash</button>
+                        <button class="quick-pay-btn" onclick="setPaymentMode('Card')">💳 Card</button>
+                        <button class="quick-pay-btn" onclick="setPaymentMode('UPI')">📱 UPI</button>
+                    </div>
+                </div>
+
+                <!-- Add to Bill Section -->
+                <div class="form-section">
+                    <h3>Add Items to Bill</h3>
+                    <div class="form-group">
+                        <label for="billProductSelect">Select Product:</label>
+                        <select id="billProductSelect" required>
+                            <option value="">-- Select a product --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="billQuantity">Quantity:</label>
+                        <input type="number" id="billQuantity" value="1" min="1" required>
+                    </div>
+                    <button id="addToBillBtn" class="btn btn-secondary">Add to Bill</button>
+                </div>
+
+                <!-- Bill Items Table -->
+                <div class="bill-items-section">
+                    <h3>Bill Items</h3>
+                    <table class="bill-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Price</th>
+                                <th>Qty</th>
+                                <th>Total</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="billItemsBody">
+                            <tr class="empty-row">
+                                <td colspan="5" class="empty-state">No items in bill</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- GST/Tax Settings -->
+                <div class="tax-settings">
+                    <h3>GST/Tax Settings</h3>
+                    <div class="form-group">
+                        <label for="taxSlider">Tax Percentage: <span id="taxPercentageDisplay">18</span>%</label>
+                        <input type="range" id="taxSlider" min="0" max="100" value="18" step="0.5" class="tax-slider">
+                        <small>Slide to adjust or set to 0 to disable tax</small>
+                    </div>
+                </div>
+
+                <!-- Discount Settings -->
+                <div class="discount-settings">
+                    <h3>Apply Discount</h3>
+                    <div class="discount-options">
+                        <div class="form-group">
+                            <label>
+                                <input type="radio" name="discountType" value="percentage" checked> Percentage (%)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="radio" name="discountType" value="fixed"> Fixed Amount (₹)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="discountValue">Discount Value:</label>
+                        <input type="number" id="discountValue" placeholder="0" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <!-- Notes/Terms -->
+                <div class="notes-section">
+                    <h3>Notes / Terms</h3>
+                    <div class="form-group">
+                        <textarea id="invoiceNotes" placeholder="Add notes or terms for this invoice..." rows="3"></textarea>
+                    </div>
+                </div>
+
+                <!-- Bill Summary -->
+                <div class="bill-summary">
+                    <div class="summary-row">
+                        <label>Subtotal:</label>
+                        <span id="subtotal">₹0.00</span>
+                    </div>
+                    <div class="summary-row" id="discountRow" style="display: none;">
+                        <label>Discount:</label>
+                        <span id="discountAmount">₹0.00</span>
+                    </div>
+                    <div class="summary-row" id="afterDiscountRow" style="display: none;">
+                        <label>After Discount:</label>
+                        <span id="afterDiscountAmount">₹0.00</span>
+                    </div>
+                    <div class="summary-row" id="taxRow">
+                        <label>Tax (<span id="taxPercentageLabel">18</span>%):</label>
+                        <span id="taxAmount">₹0.00</span>
+                    </div>
+                    <div class="summary-row total">
+                        <label>Total:</label>
+                        <span id="totalAmount">₹0.00</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="bill-actions">
+                    <button id="printBillBtn" class="btn btn-success">Print Invoice</button>
+                    <button id="saveBillBtn" class="btn btn-info">Save Invoice</button>
+                    <button id="holdBillBtn" class="btn btn-warning">Hold Bill</button>
+                    <button id="newBillBtn" class="btn btn-warning">New Bill</button>
+                    <button id="viewBillsBtn" class="btn btn-primary" style="grid-column: 1 / -1;">View Saved Bills</button>
+                    <button id="printLastBillBtn" class="btn btn-secondary" style="grid-column: 1 / -1;">Print Last Bill</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Reports Section -->
+        <section class="reports-section">
+            <div class="panel-header">
+                <h2>📊 Detailed Reports</h2>
+            </div>
+
+            <!-- Report Navigation -->
+            <div class="report-nav">
+                <button class="report-nav-btn active" onclick="switchReportTab('sales')">📈 Sales Report</button>
+                <button class="report-nav-btn" onclick="switchReportTab('inventory')">📦 Inventory Report</button>
+                <button class="report-nav-btn" onclick="switchReportTab('customer')">👥 Customer Report</button>
+                <button class="report-nav-btn" onclick="switchReportTab('profit')">💰 Profit Analysis</button>
+            </div>
+
+            <!-- Report Filters -->
+            <div class="report-filters">
+                <div class="filter-group">
+                    <label for="reportStartDate">Start Date:</label>
+                    <input type="date" id="reportStartDate" class="filter-input">
+                </div>
+                <div class="filter-group">
+                    <label for="reportEndDate">End Date:</label>
+                    <input type="date" id="reportEndDate" class="filter-input">
+                </div>
+                <div class="filter-group">
+                    <label for="reportCategory">Category:</label>
+                    <select id="reportCategory" class="filter-select">
+                        <option value="">All Categories</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="Food">Food & Beverage</option>
+                        <option value="Books">Books</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="generateReport()">Generate Report</button>
+                <button class="btn btn-secondary" onclick="exportReport()">📥 Export Report</button>
+            </div>
+
+            <!-- Sales Report Tab -->
+            <div id="salesReport" class="report-tab-content active">
+                <div class="report-summary-cards">
+                    <div class="report-card">
+                        <div class="report-card-icon">💵</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Revenue</div>
+                            <div class="report-card-value" id="totalRevenue">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">🧾</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Invoices</div>
+                            <div class="report-card-value" id="totalInvoices">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">📦</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Items Sold</div>
+                            <div class="report-card-value" id="totalItemsSold">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">📊</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Avg. Invoice Value</div>
+                            <div class="report-card-value" id="avgInvoiceValue">₹0.00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-charts">
+                    <div class="chart-container">
+                        <h3>Sales Trend (Last 7 Days)</h3>
+                        <div class="chart-bars" id="salesTrendChart"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Payment Mode Distribution</h3>
+                        <div class="chart-pie" id="paymentModeChart"></div>
+                    </div>
+                </div>
+
+                <div class="report-table-container">
+                    <h3>Recent Transactions</h3>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Date</th>
+                                <th>Customer</th>
+                                <th>Items</th>
+                                <th>Payment</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesReportTableBody">
+                            <tr>
+                                <td colspan="6" class="empty-state">No data available</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Inventory Report Tab -->
+            <div id="inventoryReport" class="report-tab-content">
+                <div class="report-summary-cards">
+                    <div class="report-card">
+                        <div class="report-card-icon">📦</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Products</div>
+                            <div class="report-card-value" id="reportTotalProducts">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">💰</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Stock Value</div>
+                            <div class="report-card-value" id="reportStockValue">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">⚠️</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Low Stock Items</div>
+                            <div class="report-card-value" id="reportLowStock">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">⛔</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Out of Stock</div>
+                            <div class="report-card-value" id="reportOutOfStock">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-charts">
+                    <div class="chart-container">
+                        <h3>Stock by Category</h3>
+                        <div class="chart-bars" id="categoryStockChart"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Stock Status Distribution</h3>
+                        <div class="chart-pie" id="stockStatusChart"></div>
+                    </div>
+                </div>
+
+                <div class="report-table-container">
+                    <h3>Inventory Details</h3>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>SKU</th>
+                                <th>Category</th>
+                                <th>Stock</th>
+                                <th>Reorder Point</th>
+                                <th>Stock Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryReportTableBody">
+                            <tr>
+                                <td colspan="7" class="empty-state">No data available</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Customer Report Tab -->
+            <div id="customerReport" class="report-tab-content">
+                <div class="report-summary-cards">
+                    <div class="report-card">
+                        <div class="report-card-icon">👥</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Customers</div>
+                            <div class="report-card-value" id="totalCustomers">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">🔄</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Repeat Customers</div>
+                            <div class="report-card-value" id="repeatCustomers">0</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">💵</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Avg. Customer Value</div>
+                            <div class="report-card-value" id="avgCustomerValue">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">🏆</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Top Customer</div>
+                            <div class="report-card-value" id="topCustomer">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-table-container">
+                    <h3>Customer List</h3>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Customer Name</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                                <th>Total Purchases</th>
+                                <th>Total Spent</th>
+                                <th>Last Purchase</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerReportTableBody">
+                            <tr>
+                                <td colspan="6" class="empty-state">No data available</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Profit Analysis Tab -->
+            <div id="profitReport" class="report-tab-content">
+                <div class="report-summary-cards">
+                    <div class="report-card">
+                        <div class="report-card-icon">💰</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Revenue</div>
+                            <div class="report-card-value" id="profitTotalRevenue">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">📉</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Total Cost</div>
+                            <div class="report-card-value" id="profitTotalCost">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">📈</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Gross Profit</div>
+                            <div class="report-card-value" id="grossProfit">₹0.00</div>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon">📊</div>
+                        <div class="report-card-content">
+                            <div class="report-card-label">Profit Margin</div>
+                            <div class="report-card-value" id="profitMargin">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-charts">
+                    <div class="chart-container">
+                        <h3>Profit by Category</h3>
+                        <div class="chart-bars" id="profitByCategoryChart"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Top Selling Products</h3>
+                        <div class="chart-bars" id="topProductsChart"></div>
+                    </div>
+                </div>
+
+                <div class="report-table-container">
+                    <h3>Product Profitability</h3>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Units Sold</th>
+                                <th>Revenue</th>
+                                <th>Cost</th>
+                                <th>Profit</th>
+                                <th>Margin</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profitReportTableBody">
+                            <tr>
+                                <td colspan="6" class="empty-state">No data available</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Saved Bills Modal -->
+    <div id="savedBillsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Saved & Held Invoices</h2>
+                <button class="modal-close" onclick="closeSavedBillsModal()">&times;</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" onclick="switchModalTab('saved')">Saved Bills</button>
+                <button class="modal-tab-btn" onclick="switchModalTab('held')">Held Bills</button>
+            </div>
+            <div id="savedBillsList" class="saved-bills-list modal-tab-content" style="display: block;">
+                <p class="empty-state">Loading...</p>
+            </div>
+            <div id="heldBillsList" class="saved-bills-list modal-tab-content" style="display: none;">
+                <p class="empty-state">Loading...</p>
+            </div>
+            <div class="modal-footer">
+                <button id="exportDataBtn" class="btn btn-info">Export Data</button>
+                <button id="clearDataBtn" class="btn btn-danger">Clear Database</button>
+                <button onclick="closeSavedBillsModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Shop Settings</h2>
+                <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="settingsForm">
+                    <div class="form-section">
+                        <h3>Shop Information</h3>
+                        <div class="form-group">
+                            <label for="shopName">Shop Name:</label>
+                            <input type="text" id="shopName" placeholder="Enter your shop name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="shopAddress">Address:</label>
+                            <textarea id="shopAddress" placeholder="Enter shop address" rows="3"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="shopPhone">Phone Number:</label>
+                                <input type="tel" id="shopPhone" placeholder="Enter phone number">
+                            </div>
+                            <div class="form-group">
+                                <label for="shopEmail">Email:</label>
+                                <input type="email" id="shopEmail" placeholder="Enter email address">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="shopGST">GST Number:</label>
+                                <input type="text" id="shopGST" placeholder="Enter GST number">
+                            </div>
+                            <div class="form-group">
+                                <label for="shopPAN">PAN Number:</label>
+                                <input type="text" id="shopPAN" placeholder="Enter PAN number">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h3>Transaction Settings</h3>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="autoSaveTransactions"> Auto-save transactions (no confirmation prompt)
+                            </label>
+                            <small>When enabled, invoices will be saved automatically without asking for confirmation</small>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h3>Invoice Settings</h3>
+                        <div class="form-group">
+                            <label for="invoicePrefix">Invoice Prefix:</label>
+                            <input type="text" id="invoicePrefix" placeholder="e.g., INV" value="INV">
+                        </div>
+                        <div class="form-group">
+                            <label for="defaultTaxRate">Default Tax Rate (%):</label>
+                            <input type="number" id="defaultTaxRate" placeholder="18" value="18" min="0" max="100" step="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label for="invoiceFooter">Invoice Footer Message:</label>
+                            <textarea id="invoiceFooter" placeholder="Thank you for your business!" rows="2">Thank you for your business!</textarea>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h3>Bank Details (Optional)</h3>
+                        <div class="form-group">
+                            <label for="bankName">Bank Name:</label>
+                            <input type="text" id="bankName" placeholder="Enter bank name">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="accountNumber">Account Number:</label>
+                                <input type="text" id="accountNumber" placeholder="Enter account number">
+                            </div>
+                            <div class="form-group">
+                                <label for="ifscCode">IFSC Code:</label>
+                                <input type="text" id="ifscCode" placeholder="Enter IFSC code">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="resetSettings()">Reset to Default</button>
+                <button type="button" class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Management Modal -->
+    <div id="userManagementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>👥 User Management</h2>
+                <button class="modal-close" onclick="closeUserManagementModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Add User Form -->
+                <div class="form-section">
+                    <h3>Add New User</h3>
+                    <form id="addUserForm" onsubmit="handleAddUser(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newUsername">Username:</label>
+                                <input type="text" id="newUsername" placeholder="Enter username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="newFullName">Full Name:</label>
+                                <input type="text" id="newFullName" placeholder="Enter full name" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newEmail">Email:</label>
+                                <input type="email" id="newEmail" placeholder="Enter email">
+                            </div>
+                            <div class="form-group">
+                                <label for="newPassword">Password:</label>
+                                <input type="password" id="newPassword" placeholder="Enter password" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newRole">Role:</label>
+                                <select id="newRole">
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add User</button>
+                    </form>
+                </div>
+                
+                <!-- Users List -->
+                <div class="form-section">
+                    <h3>All Users</h3>
+                    <div id="usersList" class="users-list">
+                        <p class="empty-state">Loading users...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeUserManagementModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Container (Hidden) -->
+    <div id="printContainer" class="print-container"></div>
+
+    <!-- Script -->
+    <script src="script.js"></script>
+</body>
+</html>
