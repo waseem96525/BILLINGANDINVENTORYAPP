@@ -15,6 +15,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const database = firebase.database();
 
+// Set auth persistence to LOCAL for cross-device login
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .catch(error => console.error('Auth persistence error:', error));
+
 // Application State
 let products = [];
 let billItems = [];
