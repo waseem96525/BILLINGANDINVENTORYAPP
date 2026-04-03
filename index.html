@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#667eea">
     <title>Billing & Inventory Management System</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234f46e5' width='100' height='100' rx='20'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📦</text></svg>">
     <link rel="stylesheet" href="styles.css">
@@ -18,51 +21,51 @@
             
             <!-- Login Form -->
             <div id="loginForm" class="auth-form">
-                <h2>Login</h2>
+                <h2>Welcome Back</h2>
                 <form onsubmit="handleLogin(event)">
                     <div class="form-group">
-                        <label for="loginUsername">Username:</label>
-                        <input type="text" id="loginUsername" placeholder="Enter username" required>
+                        <label for="loginUsername">Username</label>
+                        <input type="text" id="loginUsername" placeholder="Enter your username" required>
                     </div>
                     <div class="form-group">
-                        <label for="loginPassword">Password:</label>
-                        <input type="password" id="loginPassword" placeholder="Enter password" required>
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                    <button type="submit" class="btn btn-primary">Sign In</button>
                 </form>
                 <p class="auth-switch">
-                    Don't have an account? <a href="#" onclick="showRegisterForm()">Register</a>
+                    Don't have an account? <a href="#" onclick="showRegisterForm()">Create one</a>
                 </p>
             </div>
             
             <!-- Register Form -->
             <div id="registerForm" class="auth-form" style="display: none;">
-                <h2>Register</h2>
+                <h2>Create Account</h2>
                 <form onsubmit="handleRegister(event)">
                     <div class="form-group">
-                        <label for="registerUsername">Username:</label>
+                        <label for="registerUsername">Username</label>
                         <input type="text" id="registerUsername" placeholder="Choose a username" required>
                     </div>
                     <div class="form-group">
-                        <label for="registerFullName">Full Name:</label>
+                        <label for="registerFullName">Full Name</label>
                         <input type="text" id="registerFullName" placeholder="Enter your full name" required>
                     </div>
                     <div class="form-group">
-                        <label for="registerEmail">Email:</label>
+                        <label for="registerEmail">Email</label>
                         <input type="email" id="registerEmail" placeholder="Enter email address">
                     </div>
                     <div class="form-group">
-                        <label for="registerPassword">Password:</label>
+                        <label for="registerPassword">Password</label>
                         <input type="password" id="registerPassword" placeholder="Choose a password" required>
                     </div>
                     <div class="form-group">
-                        <label for="registerConfirmPassword">Confirm Password:</label>
+                        <label for="registerConfirmPassword">Confirm Password</label>
                         <input type="password" id="registerConfirmPassword" placeholder="Confirm password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Register</button>
+                    <button type="submit" class="btn btn-primary">Create Account</button>
                 </form>
                 <p class="auth-switch">
-                    Already have an account? <a href="#" onclick="showLoginForm()">Login</a>
+                    Already have an account? <a href="#" onclick="showLoginForm()">Sign in</a>
                 </p>
             </div>
         </div>
@@ -75,8 +78,8 @@
         <header class="header">
             <div class="header-content">
                 <div class="header-title">
-                    <h1>📦 Billing & Inventory Management System</h1>
-                    <p>Manage products and create professional invoices</p>
+                    <h1>Billing & Inventory</h1>
+                    <p>Professional Management System</p>
                 </div>
                 <div class="header-actions">
                     <div class="user-info">
@@ -84,9 +87,15 @@
                         <span id="currentUserName">User</span>
                         <span id="currentUserRole" class="user-role">User</span>
                     </div>
-                    <button class="settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
-                    <button class="settings-btn" onclick="openUserManagementModal()" id="userMgmtBtn" style="display: none;">👥 Users</button>
-                    <button class="settings-btn logout-btn" onclick="handleLogout()">🚪 Logout</button>
+                    <button class="settings-btn" onclick="openSettingsModal()">
+                        <span>⚙️</span> Settings
+                    </button>
+                    <button class="settings-btn" onclick="openUserManagementModal()" id="userMgmtBtn" style="display: none;">
+                        <span>👥</span> Users
+                    </button>
+                    <button class="settings-btn logout-btn" onclick="handleLogout()">
+                        <span>🚪</span> Logout
+                    </button>
                 </div>
             </div>
         </header>
@@ -106,11 +115,11 @@
                         <div class="dashboard-value" id="totalProducts">0</div>
                     </div>
                     <div class="dashboard-card">
-                        <div class="dashboard-label">Total Stock Value</div>
+                        <div class="dashboard-label">Stock Value</div>
                         <div class="dashboard-value" id="totalStockValue">₹0</div>
                     </div>
                     <div class="dashboard-card alert-card">
-                        <div class="dashboard-label">⚠️ Low Stock Items</div>
+                        <div class="dashboard-label">⚠️ Low Stock</div>
                         <div class="dashboard-value" id="lowStockCount">0</div>
                     </div>
                 </div>
@@ -175,6 +184,7 @@
                         </div>
                         <button type="submit" class="btn btn-primary">Add Product</button>
                     </form>
+                    <button class="btn btn-secondary" onclick="openBulkImportModal()" style="margin-top: 10px;">📥 Bulk Import Products</button>
                 </div>
 
                 <!-- Search & Filter -->
@@ -371,16 +381,11 @@
 
         <!-- Reports Section -->
         <section class="reports-section">
-            <div class="panel-header">
-                <h2>📊 Detailed Reports</h2>
-            </div>
-
-            <!-- Report Navigation -->
             <div class="report-nav">
-                <button class="report-nav-btn active" onclick="switchReportTab('sales')">📈 Sales Report</button>
-                <button class="report-nav-btn" onclick="switchReportTab('inventory')">📦 Inventory Report</button>
-                <button class="report-nav-btn" onclick="switchReportTab('customer')">👥 Customer Report</button>
-                <button class="report-nav-btn" onclick="switchReportTab('profit')">💰 Profit Analysis</button>
+                <button class="report-nav-btn active" onclick="switchReportTab('sales')">📈 Sales</button>
+                <button class="report-nav-btn" onclick="switchReportTab('inventory')">📦 Inventory</button>
+                <button class="report-nav-btn" onclick="switchReportTab('customer')">👥 Customers</button>
+                <button class="report-nav-btn" onclick="switchReportTab('profit')">💰 Profit</button>
             </div>
 
             <!-- Report Filters -->
@@ -835,6 +840,41 @@
             </div>
             <div class="modal-footer">
                 <button onclick="closeUserManagementModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div id="bulkImportModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>📥 Bulk Import Products</h2>
+                <button class="modal-close" onclick="closeBulkImportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-section">
+                    <p style="margin-bottom: 15px;">Paste product data in CSV format (one product per line):</p>
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 15px;">
+                        <strong>Format:</strong> Name, SKU, Barcode, Category, Cost Price, Selling Price, MRP, Quantity, Reorder Point<br>
+                        <strong>Example:</strong> Laptop, SKU-001, 123456789, Electronics, 25000, 35000, 40000, 10, 5
+                    </p>
+                    <div class="form-group">
+                        <textarea id="bulkImportData" placeholder="Product Name, SKU, Barcode, Category, Cost Price, Selling Price, MRP, Quantity, Reorder Point
+Laptop, SKU-001, 123456789, Electronics, 25000, 35000, 40000, 10, 5
+Mouse, SKU-002, 123456790, Electronics, 200, 500, 600, 50, 10" rows="12" style="width: 100%; font-family: monospace; font-size: 0.9rem;"></textarea>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-primary" onclick="importBulkProducts()">Import Products</button>
+                        <button class="btn btn-secondary" onclick="downloadSampleCSV()">Download Sample CSV</button>
+                    </div>
+                </div>
+                <div id="bulkImportResults" class="form-section" style="display: none;">
+                    <h3>Import Results</h3>
+                    <div id="bulkImportStats"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeBulkImportModal()" class="btn btn-secondary">Close</button>
             </div>
         </div>
     </div>

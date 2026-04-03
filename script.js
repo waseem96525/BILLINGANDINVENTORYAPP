@@ -1459,11 +1459,9 @@ async function saveBill() {
             }
         });
         
-        // Save bill to Firebase Realtime Database
-        const billsRef = database.ref('bills');
-        
+        const userId = currentUser ? currentUser.id : null;
         const billData = {
-            userId: currentUser ? currentUser.id : null,
+            userId: userId,
             invoiceNumber: currentBill.invoiceNumber,
             date: currentBill.date,
             customerName: currentBill.customerName,
@@ -1480,7 +1478,15 @@ async function saveBill() {
             savedAt: new Date().toLocaleString('en-IN')
         };
         
-        await billsRef.push(billData);
+        // Save bill to user-specific path
+        if (userId) {
+            const userBillsRef = database.ref(`users/${userId}/bills`);
+            await userBillsRef.push(billData);
+            console.log('Bill saved to user-specific path:', userId);
+        } else {
+            const billsRef = database.ref('bills');
+            await billsRef.push(billData);
+        }
         
         // Save updated products
         saveData();
@@ -1498,15 +1504,21 @@ async function saveBill() {
 
 async function saveData() {
     try {
-        // Save products to Firebase Realtime Database
-        const productsRef = database.ref('products');
-        await productsRef.set(products);
-        console.log('Products saved to Firebase');
+        const userId = currentUser ? currentUser.id : null;
         
-        // Save invoice counter to Firebase Realtime Database
+        if (userId) {
+            const userProductsRef = database.ref(`users/${userId}/products`);
+            await userProductsRef.set(products);
+            console.log('Products saved to Firebase for user:', userId);
+        } else {
+            const productsRef = database.ref('products');
+            await productsRef.set(products);
+            console.log('Products saved to Firebase');
+        }
+        
         const metadataRef = database.ref('metadata');
         await metadataRef.set({ invoiceCounter: invoiceCounter });
-        console.log('Invoice counter saved to Firebase');
+        console.log('Shared invoice counter saved:', invoiceCounter);
     } catch (error) {
         console.error('Error saving data:', error);
         throw error;
@@ -1515,30 +1527,35 @@ async function saveData() {
 
 async function loadData() {
     try {
-        // Load products from Firebase Realtime Database
-        const productsRef = database.ref('products');
-        const productsSnapshot = await productsRef.once('value');
-        const allProducts = productsSnapshot.val() || [];
+        let allProducts;
         
-        // Filter products by current user (admin sees all, user sees only their own)
-        if (currentUser && currentUser.role === 'admin') {
-            products = Array.isArray(allProducts) ? allProducts : Object.values(allProducts);
-        } else if (currentUser) {
-            const productsArray = Array.isArray(allProducts) ? allProducts : Object.values(allProducts);
-            products = productsArray.filter(p => p.userId === currentUser.id);
+        if (currentUser && currentUser.id) {
+            const userProductsRef = database.ref(`users/${currentUser.id}/products`);
+            const productsSnapshot = await userProductsRef.once('value');
+            const productsData = productsSnapshot.val();
+            allProducts = productsData ? Object.values(productsData) : [];
+            console.log(`Loaded ${allProducts.length} products from Firebase for user:`, currentUser.id);
         } else {
-            products = [];
+            const productsRef = database.ref('products');
+            const productsSnapshot = await productsRef.once('value');
+            allProducts = productsSnapshot.val() || [];
+            products = Array.isArray(allProducts) ? allProducts : Object.values(allProducts);
+            console.log(`Loaded ${products.length} products from Firebase`);
+            updateBillProductSelect();
+            return;
         }
-        console.log(`Loaded ${products.length} products from Firebase`);
         
-        // Load invoice counter from Firebase Realtime Database
+        products = allProducts;
+        
         const metadataRef = database.ref('metadata');
         const metadataSnapshot = await metadataRef.once('value');
         const metadata = metadataSnapshot.val();
         
         if (metadata && metadata.invoiceCounter) {
             invoiceCounter = metadata.invoiceCounter;
-            console.log('Loaded invoice counter:', invoiceCounter);
+            console.log('Loaded SHARED invoice counter:', invoiceCounter);
+        } else {
+            invoiceCounter = 1;
         }
         
         updateBillProductSelect();
@@ -1551,46 +1568,74 @@ async function loadData() {
 // ============== UTILITY FUNCTIONS ==============
 
 function showAlert(message, type) {
+    // Remove existing alerts first
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+    
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type}`;
-    alertDiv.textContent = message;
+    alertDiv.innerHTML = `
+        <span style="margin-right: 10px;">${type === 'success' ? '✓' : '✕'}</span>
+        ${message}
+    `;
     
-    // Insert at top of main content
-    const mainContent = document.querySelector('.main-content');
-    mainContent.insertBefore(alertDiv, mainContent.firstChild);
+    // Insert at top of body (fixed position)
+    document.body.insertBefore(alertDiv, document.body.firstChild);
     
     // Auto remove after 3 seconds
     setTimeout(() => {
-        alertDiv.remove();
+        if (alertDiv.parentNode) {
+            alertDiv.style.animation = 'slideOutRight 0.3s ease-out forwards';
+            setTimeout(() => alertDiv.remove(), 300);
+        }
     }, 3000);
 }
+
+// Add slideOutRight animation to styles dynamically
+const alertStyles = document.createElement('style');
+alertStyles.textContent = `
+    @keyframes slideOutRight {
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(alertStyles);
 
 // ============== SAVED BILLS MANAGEMENT ==============
 
 async function getAllSavedBills() {
     try {
-        const billsRef = database.ref('bills');
-        const snapshot = await billsRef.once('value');
-        const allBillsData = snapshot.val();
+        const userId = currentUser ? currentUser.id : null;
+        let allBills = [];
         
-        if (!allBillsData) {
-            return [];
-        }
-        
-        // Convert object to array with IDs
-        const allBills = Object.keys(allBillsData).map(key => ({
-            ...allBillsData[key],
-            id: key
-        }));
-        
-        // Filter bills by current user (admin sees all, user sees only their own)
-        if (currentUser && currentUser.role === 'admin') {
-            return allBills;
-        } else if (currentUser) {
-            return allBills.filter(b => b.userId === currentUser.id);
+        if (userId) {
+            const userBillsRef = database.ref(`users/${userId}/bills`);
+            const snapshot = await userBillsRef.once('value');
+            const billsData = snapshot.val();
+            
+            if (billsData) {
+                allBills = Object.keys(billsData).map(key => ({
+                    ...billsData[key],
+                    id: key
+                }));
+            }
+            console.log(`Loaded ${allBills.length} bills from Firebase for user:`, userId);
         } else {
-            return [];
+            const billsRef = database.ref('bills');
+            const snapshot = await billsRef.once('value');
+            const allBillsData = snapshot.val();
+            
+            if (allBillsData) {
+                allBills = Object.keys(allBillsData).map(key => ({
+                    ...allBillsData[key],
+                    id: key
+                }));
+            }
         }
+        
+        return allBills;
     } catch (error) {
         console.error('Error retrieving bills:', error);
         throw error;
@@ -1599,15 +1644,23 @@ async function getAllSavedBills() {
 
 async function getBillByInvoiceNumber(invoiceNumber) {
     try {
-        const billsRef = database.ref('bills');
-        const snapshot = await billsRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).once('value');
-        const billsData = snapshot.val();
+        const userId = currentUser ? currentUser.id : null;
+        let billsData = null;
+        
+        if (userId) {
+            const userBillsRef = database.ref(`users/${userId}/bills`);
+            const snapshot = await userBillsRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).once('value');
+            billsData = snapshot.val();
+        } else {
+            const billsRef = database.ref('bills');
+            const snapshot = await billsRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).once('value');
+            billsData = snapshot.val();
+        }
         
         if (!billsData) {
             return null;
         }
         
-        // Get the first (and should be only) bill with this invoice number
         const billId = Object.keys(billsData)[0];
         return { ...billsData[billId], id: billId };
     } catch (error) {
@@ -1618,8 +1671,15 @@ async function getBillByInvoiceNumber(invoiceNumber) {
 
 async function deleteSavedBill(billId) {
     try {
-        const billRef = database.ref('bills/' + billId);
-        await billRef.remove();
+        const userId = currentUser ? currentUser.id : null;
+        
+        if (userId) {
+            const billRef = database.ref(`users/${userId}/bills/${billId}`);
+            await billRef.remove();
+        } else {
+            const billRef = database.ref('bills/' + billId);
+            await billRef.remove();
+        }
         console.log('Bill deleted successfully');
     } catch (error) {
         console.error('Error deleting bill:', error);
@@ -1938,15 +1998,24 @@ async function clearDatabase() {
         const userInput = prompt('Type "DELETE ALL" to confirm deletion of all data:');
         if (userInput === 'DELETE ALL') {
             try {
-                // Clear products from Firebase
-                const productsRef = database.ref('products');
-                await productsRef.remove();
-
-                // Clear bills from Firebase
-                const billsRef = database.ref('bills');
-                await billsRef.remove();
-
-                // Clear metadata from Firebase
+                const userId = currentUser ? currentUser.id : null;
+                
+                if (userId) {
+                    // Clear user-specific data from Firebase
+                    const userProductsRef = database.ref(`users/${userId}/products`);
+                    await userProductsRef.remove();
+                    
+                    const userBillsRef = database.ref(`users/${userId}/bills`);
+                    await userBillsRef.remove();
+                } else {
+                    // Clear global data from Firebase
+                    const productsRef = database.ref('products');
+                    await productsRef.remove();
+                    
+                    const billsRef = database.ref('bills');
+                    await billsRef.remove();
+                }
+                
                 const metadataRef = database.ref('metadata');
                 await metadataRef.remove();
 
@@ -2221,6 +2290,125 @@ function exportProducts() {
     URL.revokeObjectURL(url);
     
     showAlert('Inventory exported successfully!', 'success');
+}
+
+function openBulkImportModal() {
+    document.getElementById('bulkImportModal').classList.add('show');
+    document.getElementById('bulkImportResults').style.display = 'none';
+}
+
+function closeBulkImportModal() {
+    document.getElementById('bulkImportModal').classList.remove('show');
+}
+
+function downloadSampleCSV() {
+    const sampleData = `Product Name,SKU,Barcode,Category,Cost Price,Selling Price,MRP,Quantity,Reorder Point
+Laptop Pro,SKU-001,1234567890123,Electronics,25000,35000,40000,10,5
+Wireless Mouse,SKU-002,1234567890124,Electronics,200,500,600,50,10
+USB Cable,SKU-003,1234567890125,Electronics,50,150,200,100,20
+Cotton T-Shirt,SKU-004,1234567890126,Clothing,150,399,499,30,10
+Denim Jeans,SKU-005,1234567890127,Clothing,400,899,1099,15,5
+Mineral Water,SKU-006,1234567890128,Food & Beverage,10,20,25,200,50
+Energy Bar,SKU-007,1234567890129,Food & Beverage,15,35,40,100,25
+Programming Guide,SKU-008,1234567890130,Books,200,350,400,20,5
+Notebook,SKU-009,1234567890131,Other,30,60,80,50,15`;
+
+    const blob = new Blob([sampleData], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'sample_products.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function importBulkProducts() {
+    const input = document.getElementById('bulkImportData').value.trim();
+    
+    if (!input) {
+        showAlert('Please enter product data', 'error');
+        return;
+    }
+    
+    const lines = input.split('\n').filter(line => line.trim());
+    
+    if (lines.length === 0) {
+        showAlert('No valid data found', 'error');
+        return;
+    }
+    
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    lines.forEach((line, index) => {
+        if (index === 0 && line.toLowerCase().includes('product name')) {
+            return;
+        }
+        
+        const parts = line.split(',').map(p => p.trim());
+        
+        if (parts.length < 5) {
+            errorCount++;
+            errors.push(`Row ${index + 1}: Not enough fields`);
+            return;
+        }
+        
+        const name = parts[0];
+        const sku = parts[1] || `SKU-${Date.now()}-${index}`;
+        const barcode = parts[2] || `BAR-${Date.now()}-${index}`;
+        const category = parts[3] || 'Other';
+        const costPrice = parseFloat(parts[4]) || 0;
+        const price = parseFloat(parts[5]) || parseFloat(parts[4]) || 0;
+        const mrp = parseFloat(parts[6]) || price;
+        const quantity = parseInt(parts[7]) || 0;
+        const reorderPoint = parseInt(parts[8]) || 10;
+        
+        if (!name || price <= 0) {
+            errorCount++;
+            errors.push(`Row ${index + 1}: Invalid name or price`);
+            return;
+        }
+        
+        const product = {
+            id: Date.now() + index,
+            userId: currentUser ? currentUser.id : null,
+            name: name,
+            sku: sku,
+            barcode: barcode,
+            category: category,
+            costPrice: costPrice,
+            price: price,
+            mrp: mrp,
+            quantity: quantity,
+            reorderPoint: reorderPoint,
+            description: '',
+            createdAt: new Date().toLocaleDateString('en-IN')
+        };
+        
+        products.push(product);
+        successCount++;
+    });
+    
+    if (successCount > 0) {
+        saveData();
+        renderProducts();
+        updateBillProductSelect();
+        updateInventoryDashboard();
+    }
+    
+    const resultsDiv = document.getElementById('bulkImportResults');
+    const statsDiv = document.getElementById('bulkImportStats');
+    resultsDiv.style.display = 'block';
+    
+    let html = `<div style="color: #10b981; font-weight: bold;">✓ ${successCount} products imported successfully</div>`;
+    if (errorCount > 0) {
+        html += `<div style="color: #ef4444; margin-top: 10px;">✗ ${errorCount} products failed</div>`;
+        html += `<div style="margin-top: 10px; font-size: 0.85rem; color: #6b7280;">${errors.join('<br>')}</div>`;
+    }
+    statsDiv.innerHTML = html;
+    
+    showAlert(`${successCount} products imported!`, 'success');
 }
 
 // ============== REPORTS FUNCTIONALITY ==============
