@@ -87,6 +87,12 @@
                         <span id="currentUserName">User</span>
                         <span id="currentUserRole" class="user-role">User</span>
                     </div>
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">
+                        <span id="themeIcon">🌙</span>
+                    </button>
+                    <button class="settings-btn" onclick="openQuickPOS()" title="Quick POS (F2)">
+                        <span>⚡</span> POS
+                    </button>
                     <button class="settings-btn" onclick="openSettingsModal()">
                         <span>⚙️</span> Settings
                     </button>
@@ -305,12 +311,11 @@
                 </div>
 
                 <!-- GST/Tax Settings -->
-                <div class="tax-settings">
+                <div class="tax-settings" style="display: none;">
                     <h3>GST/Tax Settings</h3>
                     <div class="form-group">
-                        <label for="taxSlider">Tax Percentage: <span id="taxPercentageDisplay">18</span>%</label>
-                        <input type="range" id="taxSlider" min="0" max="100" value="18" step="0.5" class="tax-slider">
-                        <small>Slide to adjust or set to 0 to disable tax</small>
+                        <label for="taxSlider">Tax Percentage: <span id="taxPercentageDisplay">0</span>%</label>
+                        <input type="range" id="taxSlider" min="0" max="100" value="0" step="0.5" class="tax-slider">
                     </div>
                 </div>
 
@@ -357,8 +362,8 @@
                         <label>After Discount:</label>
                         <span id="afterDiscountAmount">₹0.00</span>
                     </div>
-                    <div class="summary-row" id="taxRow">
-                        <label>Tax (<span id="taxPercentageLabel">18</span>%):</label>
+                    <div class="summary-row" id="taxRow" style="display: none;">
+                        <label>Tax:</label>
                         <span id="taxAmount">₹0.00</span>
                     </div>
                     <div class="summary-row total">
@@ -750,10 +755,6 @@
                             <input type="text" id="invoicePrefix" placeholder="e.g., INV" value="INV">
                         </div>
                         <div class="form-group">
-                            <label for="defaultTaxRate">Default Tax Rate (%):</label>
-                            <input type="number" id="defaultTaxRate" placeholder="18" value="18" min="0" max="100" step="0.5">
-                        </div>
-                        <div class="form-group">
                             <label for="invoiceFooter">Invoice Footer Message:</label>
                             <textarea id="invoiceFooter" placeholder="Thank you for your business!" rows="2">Thank you for your business!</textarea>
                         </div>
@@ -877,6 +878,91 @@ Mouse, SKU-002, 123456790, Electronics, 200, 500, 600, 50, 10" rows="12" style="
                 <button onclick="closeBulkImportModal()" class="btn btn-secondary">Close</button>
             </div>
         </div>
+    </div>
+
+    <!-- Quick POS Overlay -->
+    <div id="quickPOSOverlay" class="quick-pos-overlay">
+        <div class="quick-pos-header">
+            <h2>⚡ Quick POS</h2>
+            <div class="quick-pos-actions">
+                <button onclick="closeQuickPOS()">✕ Close</button>
+                <button onclick="printQuickPOSInvoice()">🖨️ Print</button>
+            </div>
+        </div>
+        <div class="quick-pos-content">
+            <div class="quick-pos-products">
+                <div class="quick-pos-search">
+                    <input type="text" id="quickPOSSearch" placeholder="Search products..." oninput="filterQuickPOSProducts()">
+                </div>
+                <div class="pos-quick-actions">
+                    <button class="pos-quick-action" onclick="quickPOSToggleTax()" style="display: none;">Tax: <span id="quickPOSTaxStatus">Off</span></button>
+                    <button class="pos-quick-action" onclick="quickPOSClearCart()">🗑️ Clear</button>
+                    <button class="pos-quick-action" onclick="quickPOSLastCustomer()">📋 Last Customer</button>
+                </div>
+                <div id="quickPOSProductsGrid" class="quick-pos-products-grid">
+                    <!-- Products will be loaded here -->
+                </div>
+            </div>
+            <div class="quick-pos-cart">
+                <div class="quick-pos-cart-title">🛒 Current Bill</div>
+                <div class="quick-pos-customer">
+                    <input type="text" id="quickPOSCustomerName" placeholder="Customer Name">
+                    <input type="tel" id="quickPOSCustomerPhone" placeholder="Phone (optional)">
+                </div>
+                <select id="quickPOSPaymentMode" class="filter-select" style="margin-bottom: 15px;">
+                    <option value="Cash">💵 Cash</option>
+                    <option value="Card">💳 Card</option>
+                    <option value="UPI">📱 UPI</option>
+                    <option value="Online Transfer">🏦 Bank Transfer</option>
+                </select>
+                <div id="quickPOSCartItems" class="quick-pos-cart-items">
+                    <p class="empty-state">Click products to add</p>
+                </div>
+                <div class="quick-pos-cart-summary">
+                    <div class="quick-pos-cart-row">
+                        <span>Items:</span>
+                        <span id="quickPOSItemCount">0</span>
+                    </div>
+                    <div class="quick-pos-cart-row">
+                        <span>Subtotal:</span>
+                        <span id="quickPOSSubtotal">₹0.00</span>
+                    </div>
+                    <div class="quick-pos-cart-row">
+                        <span>Tax (18%):</span>
+                        <span id="quickPOSTax">₹0.00</span>
+                    </div>
+                    <div class="quick-pos-cart-row total">
+                        <span>Total:</span>
+                        <span id="quickPOSTotal">₹0.00</span>
+                    </div>
+                </div>
+                <div class="quick-pos-cart-actions">
+                    <button class="btn btn-success" onclick="saveQuickPOSBill()">💾 Save Invoice</button>
+                    <button class="btn btn-warning" onclick="quickPOSHoldBill()">📌 Hold Bill</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Hints -->
+    <div class="keyboard-hints">
+        <h4>⌨️ Keyboard Shortcuts</h4>
+        <p><kbd>F2</kbd> Quick POS</p>
+        <p><kbd>F1</kbd> New Bill</p>
+        <p><kbd>Ctrl+S</kbd> Save Bill</p>
+        <p><kbd>Ctrl+P</kbd> Print Invoice</p>
+        <p><kbd>Esc</kbd> Close Modal</p>
+    </div>
+
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="offline-indicator">
+        📡 You are offline - Changes will sync when connection is restored
+    </div>
+
+    <!-- Backup Status -->
+    <div id="backupStatus" class="backup-status success" onclick="manualBackup()">
+        <span>☁️</span>
+        <span id="backupStatusText">Auto-backup enabled</span>
     </div>
 
     <!-- Print Container (Hidden) -->

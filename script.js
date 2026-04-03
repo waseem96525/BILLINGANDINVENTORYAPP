@@ -23,7 +23,7 @@ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
 let products = [];
 let billItems = [];
 let invoiceCounter = 1;
-let taxRate = 18; // Default tax rate in percentage
+let taxRate = 0;
 let discountType = 'percentage'; // 'percentage' or 'fixed'
 let discountValue = 0;
 let heldBills = []; // Store held bills
@@ -55,7 +55,6 @@ let shopSettings = {
     shopGST: '',
     shopPAN: '',
     invoicePrefix: 'INV',
-    defaultTaxRate: 18,
     invoiceFooter: 'Thank you for your business!',
     bankName: '',
     accountNumber: '',
@@ -588,7 +587,6 @@ function loadSettingsToForm() {
     document.getElementById('shopGST').value = shopSettings.shopGST || '';
     document.getElementById('shopPAN').value = shopSettings.shopPAN || '';
     document.getElementById('invoicePrefix').value = shopSettings.invoicePrefix || 'INV';
-    document.getElementById('defaultTaxRate').value = shopSettings.defaultTaxRate || 18;
     document.getElementById('invoiceFooter').value = shopSettings.invoiceFooter || 'Thank you for your business!';
     document.getElementById('bankName').value = shopSettings.bankName || '';
     document.getElementById('accountNumber').value = shopSettings.accountNumber || '';
@@ -604,20 +602,12 @@ function saveSettings() {
     shopSettings.shopGST = document.getElementById('shopGST').value.trim();
     shopSettings.shopPAN = document.getElementById('shopPAN').value.trim();
     shopSettings.invoicePrefix = document.getElementById('invoicePrefix').value.trim() || 'INV';
-    shopSettings.defaultTaxRate = parseFloat(document.getElementById('defaultTaxRate').value) || 18;
     shopSettings.invoiceFooter = document.getElementById('invoiceFooter').value.trim() || 'Thank you for your business!';
     shopSettings.bankName = document.getElementById('bankName').value.trim();
     shopSettings.accountNumber = document.getElementById('accountNumber').value.trim();
     shopSettings.ifscCode = document.getElementById('ifscCode').value.trim();
     shopSettings.autoSaveTransactions = document.getElementById('autoSaveTransactions').checked;
     
-    // Update tax rate if changed
-    taxRate = shopSettings.defaultTaxRate;
-    document.getElementById('taxSlider').value = taxRate;
-    document.getElementById('taxPercentageDisplay').textContent = taxRate;
-    document.getElementById('taxPercentageLabel').textContent = taxRate;
-    
-    // Save to localStorage
     localStorage.setItem('shopSettings', JSON.stringify(shopSettings));
     
     showAlert('Settings saved successfully!', 'success');
@@ -628,7 +618,491 @@ function loadSettings() {
     const saved = localStorage.getItem('shopSettings');
     if (saved) {
         shopSettings = JSON.parse(saved);
+    }
+    
+    loadTheme();
+    setupKeyboardShortcuts();
+    setupOfflineDetection();
+    setupAutoBackup();
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('shopSettings');
+    if (saved) {
+        shopSettings = JSON.parse(saved);
         taxRate = shopSettings.defaultTaxRate || 18;
+    }
+    
+    loadTheme();
+    setupKeyboardShortcuts();
+    setupOfflineDetection();
+    setupAutoBackup();
+}
+
+// ============== DARK MODE ==============
+
+function loadTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.getElementById('themeIcon').textContent = '☀️';
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    if (currentTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+        document.getElementById('themeIcon').textContent = '🌙';
+        showAlert('Light mode enabled', 'success');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        document.getElementById('themeIcon').textContent = '☀️';
+        showAlert('Dark mode enabled', 'success');
+    }
+}
+
+// ============== KEYBOARD SHORTCUTS ==============
+
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        if (e.key === 'F1') {
+            e.preventDefault();
+            createNewBill();
+            showAlert('New bill created', 'success');
+        } else if (e.key === 'F2') {
+            e.preventDefault();
+            openQuickPOS();
+        } else if (e.key === 'Escape') {
+            const modals = document.querySelectorAll('.modal.show, .quick-pos-overlay.show');
+            modals.forEach(modal => {
+                if (modal.id === 'quickPOSOverlay') {
+                    closeQuickPOS();
+                } else {
+                    modal.classList.remove('show');
+                }
+            });
+        } else if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            if (document.getElementById('quickPOSOverlay').classList.contains('show')) {
+                saveQuickPOSBill();
+            } else {
+                saveBill();
+            }
+        } else if (e.ctrlKey && e.key === 'p') {
+            e.preventDefault();
+            printInvoice();
+        }
+    });
+}
+
+// ============== QUICK POS MODE ==============
+
+let quickPOSCart = [];
+let quickPOSTaxRate = 0;
+let lastQuickPOSCustomer = { name: '', phone: '' };
+
+function openQuickPOS() {
+    document.getElementById('quickPOSOverlay').classList.add('show');
+    document.getElementById('quickPOSSearch').focus();
+    renderQuickPOSProducts();
+    updateQuickPOSCart();
+}
+
+function closeQuickPOS() {
+    if (quickPOSCart.length > 0 && !confirm('Clear current cart and exit?')) {
+        return;
+    }
+    document.getElementById('quickPOSOverlay').classList.remove('show');
+    quickPOSCart = [];
+}
+
+function renderQuickPOSProducts() {
+    const grid = document.getElementById('quickPOSProductsGrid');
+    const searchTerm = document.getElementById('quickPOSSearch').value.toLowerCase();
+    
+    const filtered = products.filter(p => 
+        p.name.toLowerCase().includes(searchTerm) || 
+        p.sku.toLowerCase().includes(searchTerm)
+    );
+    
+    if (filtered.length === 0) {
+        grid.innerHTML = '<p class="empty-state">No products found</p>';
+        return;
+    }
+    
+    grid.innerHTML = filtered.map(p => `
+        <div class="quick-pos-product ${p.quantity === 0 ? 'out-of-stock' : ''}" 
+             onclick="${p.quantity > 0 ? `addToQuickPOSCart(${p.id})` : ''}">
+            <div class="quick-pos-product-name">${p.name}</div>
+            <div class="quick-pos-product-price">₹${p.price.toFixed(2)}</div>
+            <div class="quick-pos-product-stock">Stock: ${p.quantity}</div>
+        </div>
+    `).join('');
+}
+
+function filterQuickPOSProducts() {
+    renderQuickPOSProducts();
+}
+
+function addToQuickPOSCart(productId) {
+    const product = products.find(p => p.id === productId);
+    if (!product || product.quantity === 0) return;
+    
+    const existing = quickPOSCart.find(item => item.productId === productId);
+    if (existing) {
+        if (product.quantity > existing.quantity) {
+            existing.quantity++;
+        } else {
+            showAlert('Insufficient stock', 'error');
+            return;
+        }
+    } else {
+        quickPOSCart.push({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: 1
+        });
+    }
+    
+    updateQuickPOSCart();
+}
+
+function updateQuickPOSCart() {
+    const container = document.getElementById('quickPOSCartItems');
+    
+    if (quickPOSCart.length === 0) {
+        container.innerHTML = '<p class="empty-state">Click products to add</p>';
+        document.getElementById('quickPOSItemCount').textContent = '0';
+        document.getElementById('quickPOSSubtotal').textContent = '₹0.00';
+        document.getElementById('quickPOSTax').textContent = '₹0.00';
+        document.getElementById('quickPOSTotal').textContent = '₹0.00';
+        return;
+    }
+    
+    let subtotal = 0;
+    
+    container.innerHTML = quickPOSCart.map(item => {
+        const itemTotal = item.price * item.quantity;
+        subtotal += itemTotal;
+        return `
+            <div class="quick-pos-cart-item">
+                <div class="quick-pos-cart-item-info">
+                    <div class="quick-pos-cart-item-name">${item.name}</div>
+                    <div class="quick-pos-cart-item-price">₹${item.price.toFixed(2)} × ${item.quantity}</div>
+                </div>
+                <div class="quick-pos-cart-item-qty">
+                    <button onclick="updateQuickPOSQty(${item.productId}, ${item.quantity - 1})">−</button>
+                    <input type="number" value="${item.quantity}" min="1" 
+                           onchange="updateQuickPOSQty(${item.productId}, parseInt(this.value))">
+                    <button onclick="updateQuickPOSQty(${item.productId}, ${item.quantity + 1})">+</button>
+                </div>
+                <div class="quick-pos-cart-item-total">₹${itemTotal.toFixed(2)}</div>
+                <button class="quick-pos-cart-item-remove" onclick="removeFromQuickPOS(${item.productId})">✕</button>
+            </div>
+        `;
+    }).join('');
+    
+    const tax = (subtotal * quickPOSTaxRate) / 100;
+    const total = subtotal + tax;
+    
+    document.getElementById('quickPOSItemCount').textContent = quickPOSCart.reduce((sum, item) => sum + item.quantity, 0);
+    document.getElementById('quickPOSSubtotal').textContent = '₹' + subtotal.toFixed(2);
+    document.getElementById('quickPOSTax').textContent = '₹' + tax.toFixed(2);
+    document.getElementById('quickPOSTotal').textContent = '₹' + total.toFixed(2);
+}
+
+function updateQuickPOSQty(productId, newQty) {
+    if (newQty < 1) {
+        removeFromQuickPOS(productId);
+        return;
+    }
+    
+    const item = quickPOSCart.find(i => i.productId === productId);
+    const product = products.find(p => p.id === productId);
+    
+    if (product && product.quantity >= newQty) {
+        item.quantity = newQty;
+        updateQuickPOSCart();
+    } else {
+        showAlert('Insufficient stock', 'error');
+    }
+}
+
+function removeFromQuickPOS(productId) {
+    quickPOSCart = quickPOSCart.filter(item => item.productId !== productId);
+    updateQuickPOSCart();
+}
+
+function quickPOSToggleTax() {
+    quickPOSTaxRate = quickPOSTaxRate > 0 ? 0 : 18;
+    document.getElementById('quickPOSTaxStatus').textContent = quickPOSTaxRate + '%';
+    updateQuickPOSCart();
+}
+
+function quickPOSClearCart() {
+    if (quickPOSCart.length === 0 || confirm('Clear all items?')) {
+        quickPOSCart = [];
+        updateQuickPOSCart();
+    }
+}
+
+function quickPOSLastCustomer() {
+    document.getElementById('quickPOSCustomerName').value = lastQuickPOSCustomer.name;
+    document.getElementById('quickPOSCustomerPhone').value = lastQuickPOSCustomer.phone;
+}
+
+async function saveQuickPOSBill() {
+    if (quickPOSCart.length === 0) {
+        showAlert('No items in cart', 'error');
+        return;
+    }
+    
+    try {
+        const customerName = document.getElementById('quickPOSCustomerName').value;
+        const customerPhone = document.getElementById('quickPOSCustomerPhone').value;
+        const paymentMode = document.getElementById('quickPOSPaymentMode').value;
+        
+        lastQuickPOSCustomer = { name: customerName, phone: customerPhone };
+        
+        const subtotal = quickPOSCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const tax = (subtotal * quickPOSTaxRate) / 100;
+        const total = subtotal + tax;
+        
+        const billData = {
+            userId: currentUser ? currentUser.id : null,
+            invoiceNumber: currentBill.invoiceNumber,
+            date: new Date().toLocaleDateString('en-IN'),
+            customerName: customerName,
+            customerPhone: customerPhone,
+            customerEmail: '',
+            paymentMode: paymentMode,
+            items: JSON.parse(JSON.stringify(quickPOSCart)),
+            subtotal: subtotal,
+            discount: 0,
+            tax: tax,
+            total: total,
+            notes: '',
+            billStatus: 'finalized',
+            savedAt: new Date().toLocaleString('en-IN')
+        };
+        
+        const userId = currentUser ? currentUser.id : null;
+        if (userId) {
+            const userBillsRef = database.ref(`users/${userId}/bills`);
+            await userBillsRef.push(billData);
+        } else {
+            const billsRef = database.ref('bills');
+            await billsRef.push(billData);
+        }
+        
+        quickPOSCart.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+                product.quantity -= item.quantity;
+            }
+        });
+        
+        await saveData();
+        
+        invoiceCounter++;
+        updateInvoiceNumber();
+        
+        showAlert('Invoice saved successfully!', 'success');
+        quickPOSCart = [];
+        updateQuickPOSCart();
+        
+    } catch (error) {
+        console.error('Error saving quick POS bill:', error);
+        showAlert('Error saving bill', 'error');
+    }
+}
+
+function printQuickPOSInvoice() {
+    if (quickPOSCart.length === 0) {
+        showAlert('No items to print', 'error');
+        return;
+    }
+    
+    const customerName = document.getElementById('quickPOSCustomerName').value || 'Walk-in Customer';
+    const paymentMode = document.getElementById('quickPOSPaymentMode').value;
+    const subtotal = quickPOSCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const tax = (subtotal * quickPOSTaxRate) / 100;
+    const total = subtotal + tax;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Invoice - ${currentBill.invoiceNumber}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; }
+                h1 { text-align: center; color: #4f46e5; }
+                .info { margin: 10px 0; }
+                table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+                .total { font-weight: bold; font-size: 1.2em; }
+                .text-right { text-align: right; }
+            </style>
+        </head>
+        <body>
+            <h1>${shopSettings.shopName || 'Shop'}</h1>
+            <div class="info">
+                <strong>Invoice:</strong> ${currentBill.invoiceNumber}<br>
+                <strong>Date:</strong> ${new Date().toLocaleDateString()}<br>
+                <strong>Customer:</strong> ${customerName}<br>
+                <strong>Payment:</strong> ${paymentMode}
+            </div>
+            <table>
+                <thead><tr><th>Item</th><th class="text-right">Qty</th><th class="text-right">Price</th><th class="text-right">Total</th></tr></thead>
+                <tbody>
+                    ${quickPOSCart.map(item => `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td class="text-right">${item.quantity}</td>
+                            <td class="text-right">₹${item.price.toFixed(2)}</td>
+                            <td class="text-right">₹${(item.price * item.quantity).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            <div class="info">
+                <div class="text-right">Subtotal: ₹${subtotal.toFixed(2)}</div>
+                ${quickPOSTaxRate > 0 ? `<div class="text-right">Tax: ₹${tax.toFixed(2)}</div>` : ''}
+                <div class="text-right total">Total: ₹${total.toFixed(2)}</div>
+            </div>
+            <p style="text-align: center; margin-top: 20px;">${shopSettings.invoiceFooter || 'Thank you!'}</p>
+            <script>window.print();</script>
+        </body>
+        </html>
+    `);
+}
+
+function quickPOSHoldBill() {
+    if (quickPOSCart.length === 0) {
+        showAlert('No items to hold', 'error');
+        return;
+    }
+    
+    const heldBill = {
+        id: Date.now(),
+        items: JSON.parse(JSON.stringify(quickPOSCart)),
+        customerName: document.getElementById('quickPOSCustomerName').value,
+        customerPhone: document.getElementById('quickPOSCustomerPhone').value,
+        paymentMode: document.getElementById('quickPOSPaymentMode').value,
+        heldAt: new Date().toLocaleString()
+    };
+    
+    heldBills.push(heldBill);
+    localStorage.setItem('heldBills', JSON.stringify(heldBills));
+    
+    quickPOSCart = [];
+    updateQuickPOSCart();
+    showAlert('Bill held successfully!', 'success');
+}
+
+// ============== OFFLINE MODE ==============
+
+function setupOfflineDetection() {
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOfflineStatus);
+    
+    if (!navigator.onLine) {
+        handleOfflineStatus();
+    }
+}
+
+function handleOfflineStatus() {
+    document.getElementById('offlineIndicator').classList.add('show');
+    showAlert('You are offline. Changes will sync when connected.', 'error');
+}
+
+function handleOnlineStatus() {
+    document.getElementById('offlineIndicator').classList.remove('show');
+    showAlert('Back online! Syncing data...', 'success');
+    syncOfflineData();
+}
+
+async function syncOfflineData() {
+    const offlineData = localStorage.getItem('offlineQueue');
+    if (!offlineData) return;
+    
+    try {
+        const queue = JSON.parse(offlineData);
+        for (const action of queue) {
+            if (action.type === 'saveProduct') {
+                await saveData();
+            } else if (action.type === 'saveBill') {
+                await saveBill();
+            }
+        }
+        localStorage.removeItem('offlineQueue');
+        showAlert('All data synced!', 'success');
+    } catch (error) {
+        console.error('Sync error:', error);
+    }
+}
+
+// ============== AUTO BACKUP ==============
+
+let lastBackupTime = null;
+let backupInterval = null;
+
+function setupAutoBackup() {
+    updateBackupStatus('success', 'Auto-backup enabled');
+    
+    backupInterval = setInterval(async () => {
+        if (navigator.onLine) {
+            await performAutoBackup();
+        }
+    }, 300000);
+}
+
+async function performAutoBackup() {
+    try {
+        updateBackupStatus('syncing', 'Backing up...');
+        
+        const backupData = {
+            products: products,
+            settings: shopSettings,
+            heldBills: heldBills,
+            timestamp: new Date().toISOString()
+        };
+        
+        const userId = currentUser ? currentUser.id : null;
+        if (userId) {
+            const backupRef = database.ref(`users/${userId}/backup`);
+            await backupRef.set(backupData);
+        }
+        
+        lastBackupTime = new Date();
+        localStorage.setItem('lastBackup', lastBackupTime.toISOString());
+        updateBackupStatus('success', 'Last backup: ' + lastBackupTime.toLocaleTimeString());
+        
+    } catch (error) {
+        console.error('Backup error:', error);
+        updateBackupStatus('error', 'Backup failed');
+    }
+}
+
+function updateBackupStatus(status, text) {
+    const statusEl = document.getElementById('backupStatus');
+    statusEl.className = 'backup-status ' + status;
+    document.getElementById('backupStatusText').textContent = text;
+}
+
+function manualBackup() {
+    if (navigator.onLine) {
+        performAutoBackup();
+        showAlert('Manual backup started...', 'success');
+    } else {
+        showAlert('Cannot backup while offline', 'error');
     }
 }
 
@@ -1334,19 +1808,17 @@ function printInvoice() {
                             <span>₹${currentBill.subtotal.toFixed(2)}</span>
                         </div>
                         ${currentBill.discount > 0 ? `
-                        <div class="total-row discount">
-                            <span>Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}:</span>
-                            <span>-₹${currentBill.discount.toFixed(2)}</span>
-                        </div>
                         <div class="total-row">
                             <span>After Discount:</span>
                             <span>₹${(currentBill.subtotal - currentBill.discount).toFixed(2)}</span>
                         </div>
                         ` : ''}
+                        ${taxRate > 0 ? `
                         <div class="total-row">
-                            <span>Tax (${taxRate}%):</span>
+                            <span>Tax:</span>
                             <span>₹${currentBill.tax.toFixed(2)}</span>
                         </div>
+                        ` : ''}
                         <div class="total-row grand-total">
                             <span>Grand Total:</span>
                             <span>₹${currentBill.total.toFixed(2)}</span>
